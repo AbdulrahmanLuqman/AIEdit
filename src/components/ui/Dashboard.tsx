@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { ImageEdit } from '@/types/definitions';
-import { transformImage } from '@/utils/aiService';
 import TopBar from './TopBar';
 import UploadArea from './UploadArea';
 
@@ -30,49 +29,108 @@ const Dashboard = () => {
     setCurrentEdit(newEdit);
   };
 
+  // const handleGenerate = async (prompt: string) => {
+  //   if (!currentEdit) return;
+
+  //   setIsGenerating(true);
+  //   const updatedEdit = { ...currentEdit, prompt, status: "pending" as const };
+  //   setCurrentEdit(updatedEdit);
+
+  //   try {
+  //     // Transform image using AI service
+  //     const editedImage = await transformImage(
+  //       currentEdit.originalImage,
+  //       prompt
+  //     );
+
+  //     const completedEdit: ImageEdit = {
+  //       ...updatedEdit,
+  //       editedImage,
+  //       status: "completed",
+  //     };
+
+  //     setCurrentEdit(completedEdit);
+
+  //     // Save to history
+  //     // const history = JSON.parse(localStorage.getItem("imageHistory") || "[]");
+  //     // history.unshift(completedEdit);
+  //     // localStorage.setItem(
+  //     //   "imageHistory",
+  //     //   JSON.stringify(history.slice(0, 50))
+  //     // );
+
+  //     setToast({ message: "✨ AI transformation complete!", type: "success" });
+  //   } catch (error) {
+  //     const errorEdit = { ...updatedEdit, status: "error" as const };
+  //     setCurrentEdit(errorEdit);
+  //     setToast({
+  //       message: "Failed to generate image. Please try again.",
+  //       type: "error",
+  //     });
+  //     console.log("error:", error);
+  //   }
+
+  //   setIsGenerating(false);
+  // };
+
   const handleGenerate = async (prompt: string) => {
-    if (!currentEdit) return;
+  if (!currentEdit) return;
 
-    setIsGenerating(true);
-    const updatedEdit = { ...currentEdit, prompt, status: "pending" as const };
-    setCurrentEdit(updatedEdit);
+  setIsGenerating(true);
 
-    try {
-      // Transform image using AI service
-      const editedImage = await transformImage(
-        currentEdit.originalImage,
-        prompt
-      );
+  const updatedEdit = { ...currentEdit, prompt, status: "pending" as const };
+  setCurrentEdit(updatedEdit);
 
-      const completedEdit: ImageEdit = {
-        ...updatedEdit,
-        editedImage,
-        status: "completed",
-      };
+  try {
+    // ✅ Call your secure API route (server-side Google call)
+    const res = await fetch("/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        imageBase64: currentEdit.originalImage,
+        prompt,
+      }),
+    });
 
-      setCurrentEdit(completedEdit);
+    if (!res.ok) throw new Error("Image generation failed");
 
-      // Save to history
-      // const history = JSON.parse(localStorage.getItem("imageHistory") || "[]");
-      // history.unshift(completedEdit);
-      // localStorage.setItem(
-      //   "imageHistory",
-      //   JSON.stringify(history.slice(0, 50))
-      // );
+    const { editedImage } = await res.json();
 
-      setToast({ message: "✨ AI transformation complete!", type: "success" });
-    } catch (error) {
-      const errorEdit = { ...updatedEdit, status: "error" as const };
-      setCurrentEdit(errorEdit);
-      setToast({
-        message: "Failed to generate image. Please try again.",
-        type: "error",
-      });
-      console.log("error:", error);
-    }
+    // Build completed edit
+    const completedEdit: ImageEdit = {
+      ...updatedEdit,
+      editedImage,
+      status: "completed",
+    };
 
-    setIsGenerating(false);
-  };
+    // Update UI instantly
+    setCurrentEdit(completedEdit);
+
+    // Save history in Supabase (instead of localStorage)
+    // const { error: dbError } = await supabase.from("image_edits").insert([
+    //   {
+    //     user_id: currentUser.id,
+    //     original_url: currentEdit.originalImage,
+    //     edited_url: editedImage,
+    //     prompt,
+    //   },
+    // ]);
+    // if (dbError) console.error("DB save failed:", dbError);
+
+    setToast({ message: "✨ AI transformation complete!", type: "success" });
+  } catch (error) {
+    const errorEdit = { ...updatedEdit, status: "error" as const };
+    setCurrentEdit(errorEdit);
+    setToast({
+      message: "Failed to generate image. Please try again.",
+      type: "error",
+    });
+    console.error("error:", error);
+  }
+
+  setIsGenerating(false);
+};
+
 
   const handleClearImage = () => {
     setCurrentEdit(null);
