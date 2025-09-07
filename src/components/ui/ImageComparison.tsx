@@ -1,5 +1,6 @@
 import React from 'react';
 import { ArrowRight, Download, AlertCircle } from 'lucide-react';
+import Image from "next/image"
 
 interface ImageComparisonProps {
   originalImage: string;
@@ -41,11 +42,15 @@ const ImageComparison: React.FC<ImageComparisonProps> = ({
         <div className="space-y-2">
           <p className="text-sm font-medium text-[#8B949E]">Original</p>
           <div className="relative">
-            <img
-              src={originalImage}
-              alt="Original"
-              className="w-full h-48 object-cover rounded-lg"
-            />
+            <div className="w-full h-48">
+              <Image
+                src={originalImage}
+                alt="Original"
+                className=" object-cover rounded-lg"
+                fill
+              />
+            </div>
+            
           </div>
         </div>
 
@@ -59,11 +64,15 @@ const ImageComparison: React.FC<ImageComparisonProps> = ({
           <p className="text-sm font-medium text-[#8B949E]">AI Generated</p>
           <div className="relative">
             {status === 'completed' && editedImage ? (
-              <img
-                src={editedImage}
-                alt="Edited"
-                className="w-full h-48 object-cover rounded-lg ring-2 ring-[#3B82F6]/20"
-              />
+              <div className="w-full h-48 ">
+                <Image
+                  src={editedImage}
+                  alt="Edited"
+                  className="object-cover rounded-lg ring-2 ring-[#3B82F6]/20"
+                  fill
+                />
+              </div>
+              
             ) : status === 'error' ? (
               <div className="w-full h-48 bg-[#0D1117] rounded-lg flex items-center justify-center border border-[#30363D]">
                 <div className="text-center text-[#F87171]">

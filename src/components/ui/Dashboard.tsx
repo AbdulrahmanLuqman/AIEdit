@@ -1,18 +1,39 @@
 "use client"
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ImageEdit } from '@/types/definitions';
 import TopBar from './TopBar';
 import UploadArea from './UploadArea';
+import { supabase } from '@/utils/supabase';
+import { User } from '@supabase/supabase-js';
 
 import PromptArea from "./PromptArea";
 import ImageComparison from "./ImageComparison";
 import LoadingOverlay from "./LoadingOverlay";
 import Toast from "./Toast";
 
+type HistoryEntry = {
+  id: string;
+  originalImage: string;
+  editedImage: string;
+  prompt: string;
+  feature: string;
+  created_at: string;
+};
+
 const Dashboard = () => {
   const [currentEdit, setCurrentEdit] = useState<ImageEdit | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
+      setCurrentUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+  
   const [toast, setToast] = useState<{
     message: string;
     type: "success" | "error";
@@ -29,108 +50,147 @@ const Dashboard = () => {
     setCurrentEdit(newEdit);
   };
 
-  // const handleGenerate = async (prompt: string) => {
-  //   if (!currentEdit) return;
+  const addToHistory = async (historyEntry: HistoryEntry) => {
+    if (!currentUser?.id) return;
 
-  //   setIsGenerating(true);
-  //   const updatedEdit = { ...currentEdit, prompt, status: "pending" as const };
-  //   setCurrentEdit(updatedEdit);
+    try {
+      const { data: currentData, error: fetchError } = await supabase
+        .from("user_history")
+        .select("history")
+        .eq("user_id", currentUser.id)
+        .single();
 
-  //   try {
-  //     // Transform image using AI service
-  //     const editedImage = await transformImage(
-  //       currentEdit.originalImage,
-  //       prompt
-  //     );
+      if (fetchError && fetchError.code !== "PGRST116") throw fetchError;
 
-  //     const completedEdit: ImageEdit = {
-  //       ...updatedEdit,
-  //       editedImage,
-  //       status: "completed",
-  //     };
+      const currentHistory = currentData?.history || [];
+      const updatedHistory = [...currentHistory, historyEntry];
 
-  //     setCurrentEdit(completedEdit);
+      await supabase
+        .from("user_history")
+        .upsert({
+          user_id: currentUser.id,
+          history: updatedHistory
+        }, { onConflict: "user_id" });
 
-  //     // Save to history
-  //     // const history = JSON.parse(localStorage.getItem("imageHistory") || "[]");
-  //     // history.unshift(completedEdit);
-  //     // localStorage.setItem(
-  //     //   "imageHistory",
-  //     //   JSON.stringify(history.slice(0, 50))
-  //     // );
+    } catch (error) {
+        throw error;
+    }
+  };
 
-  //     setToast({ message: "✨ AI transformation complete!", type: "success" });
-  //   } catch (error) {
-  //     const errorEdit = { ...updatedEdit, status: "error" as const };
-  //     setCurrentEdit(errorEdit);
-  //     setToast({
-  //       message: "Failed to generate image. Please try again.",
-  //       type: "error",
-  //     });
-  //     console.log("error:", error);
-  //   }
-
-  //   setIsGenerating(false);
-  // };
-
-  const handleGenerate = async (prompt: string) => {
-  if (!currentEdit) return;
-
-  setIsGenerating(true);
-
-  const updatedEdit = { ...currentEdit, prompt, status: "pending" as const };
-  setCurrentEdit(updatedEdit);
-
-  try {
-    // ✅ Call your secure API route (server-side Google call)
-    const res = await fetch("/api/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        imageBase64: currentEdit.originalImage,
+  const handleGenerate = async (prompt: string, feature: string) => {
+    if (feature === 'generate' && !currentEdit) {
+      const newEdit: ImageEdit = {
+        id: Math.random().toString(36).substr(2, 9),
+        originalImage: '',
         prompt,
-      }),
-    });
+        timestamp: Date.now(),
+        status: "pending",
+      };
+      setCurrentEdit(newEdit);
+    }
 
-    if (!res.ok) throw new Error("Image generation failed");
+    if (feature !== 'generate' && !currentEdit) return;
 
-    const { editedImage } = await res.json();
+    setIsGenerating(true);
 
-    // Build completed edit
-    const completedEdit: ImageEdit = {
-      ...updatedEdit,
-      editedImage,
-      status: "completed",
-    };
+    const updatedEdit = currentEdit ? 
+      { ...currentEdit, prompt, status: "pending" as const } : 
+      {
+        id: Math.random().toString(36).substr(2, 9),
+        originalImage: '',
+        prompt,
+        timestamp: Date.now(),
+        status: "pending" as const
+      };
+    
+    setCurrentEdit(updatedEdit);
 
-    // Update UI instantly
-    setCurrentEdit(completedEdit);
+    try {
+      const apiEndpoint = '/api/generate';
+      const requestBody = getRequestBody(feature, updatedEdit.originalImage, prompt);
 
-    // Save history in Supabase (instead of localStorage)
-    // const { error: dbError } = await supabase.from("image_edits").insert([
-    //   {
-    //     user_id: currentUser.id,
-    //     original_url: currentEdit.originalImage,
-    //     edited_url: editedImage,
-    //     prompt,
-    //   },
-    // ]);
-    // if (dbError) console.error("DB save failed:", dbError);
+      // console.log(`Making request to ${apiEndpoint} with feature: ${feature}`);
 
-    setToast({ message: "✨ AI transformation complete!", type: "success" });
-  } catch (error) {
-    const errorEdit = { ...updatedEdit, status: "error" as const };
-    setCurrentEdit(errorEdit);
-    setToast({
-      message: "Failed to generate image. Please try again.",
-      type: "error",
-    });
-    console.error("error:", error);
-  }
+      const res = await fetch(apiEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
 
-  setIsGenerating(false);
-};
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.details || errorData.error || `${feature} failed`);
+      }
 
+      const { editedImage } = await res.json();
+
+      if (!editedImage) {
+        throw new Error("No image received from the API");
+      }
+      const completedEdit: ImageEdit = {
+        ...updatedEdit,
+        editedImage,
+        status: "completed",
+      };
+
+      setCurrentEdit(completedEdit);
+
+      if (currentUser?.id) {
+        const historyEntry: HistoryEntry = {
+          id: Math.random().toString(36).substr(2, 9),
+          originalImage: updatedEdit.originalImage,
+          editedImage,
+          prompt,
+          feature,
+          created_at: new Date().toISOString()
+        };
+        
+        await addToHistory(historyEntry);
+      }
+
+      const featureLabels = {
+        edit: 'Image editing',
+        generate: 'Image generation',
+        restore: 'Photo restoration'
+      };
+
+      setToast({ 
+        message: `✨ ${featureLabels[feature as keyof typeof featureLabels] || 'AI transformation'} complete!`, 
+        type: "success" 
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (error: any) {
+      const errorEdit = { ...updatedEdit, status: "error" as const };
+      setCurrentEdit(errorEdit);
+      
+      const featureLabels = {
+        edit: 'edit image',
+        generate: 'generate image',
+        restore: 'restore photo'
+      };
+      
+      setToast({
+        message: `Failed to ${featureLabels[feature as keyof typeof featureLabels] || 'process'}: ${error.message || 'Unknown error'}`,
+        type: "error",
+      });
+    }
+
+    setIsGenerating(false);
+  };
+
+  const getRequestBody = (feature: string, originalImage: string, prompt: string) => {
+    switch (feature) {
+      case 'generate':
+        return { prompt };
+      case 'restore':
+        return { 
+          imageBase64: originalImage, 
+          prompt: prompt || 'Restore and enhance this image' 
+        };
+      default:
+        return { imageBase64: originalImage, prompt };
+    }
+  };
 
   const handleClearImage = () => {
     setCurrentEdit(null);
@@ -150,13 +210,16 @@ const Dashboard = () => {
                 currentImage={currentEdit?.originalImage}
                 onClear={handleClearImage}
               />
+              <p className="text-sm text-red-500 font-semibold">
+                Note: images generated before logging in won&apos;t be part of your history
+              </p>
             </div>
 
             {/* Right Section - Prompt & Results */}
             <div className="space-y-6">
               <PromptArea
                 onGenerate={handleGenerate}
-                isDisabled={!currentEdit?.originalImage || isGenerating}
+                isDisabled={isGenerating}
                 currentPrompt={currentEdit?.prompt || ""}
               />
 

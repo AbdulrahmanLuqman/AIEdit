@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY! });
+const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! });
 
 export async function POST(req: Request) {
   try {
@@ -45,7 +45,6 @@ export async function POST(req: Request) {
       { status: 500 }
     );
   } catch (error) {
-    console.error("Error transforming image:", error);
     throw error;
   }
 }

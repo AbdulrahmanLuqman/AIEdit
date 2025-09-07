@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Upload, X, Image as ImageIcon } from 'lucide-react';
+import Image from 'next/image';
 
 interface UploadAreaProps {
   onImageUpload: (imageUrl: string) => void;
@@ -114,18 +115,13 @@ const UploadArea: React.FC<UploadAreaProps> = ({ onImageUpload, currentImage, on
       ) : (
         <div className="space-y-4">
           <div className="relative group">
-            <img
-              src={currentImage}
-              alt="Uploaded"
-              className="w-full h-64 object-cover rounded-xl"
-            />
-            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl flex items-center justify-center">
-              <button
-                onClick={handleUploadClick}
-                className="bg-[#3B82F6] hover:bg-[#2563EB] text-white px-4 py-2 rounded-lg font-medium transition-colors"
-              >
-                Change Image
-              </button>
+            <div className="relative w-full h-64 rounded-xl overflow-hidden">
+              <Image
+                src={currentImage}
+                alt="Uploaded"
+                className="object-cover"
+                fill
+              />
             </div>
           </div>
           
